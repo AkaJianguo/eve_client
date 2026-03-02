@@ -1,0 +1,18 @@
+services:
+  ve-server:
+    volumes:
+      - ./eve-server:/app          # 挂载后端代码
+    ports:
+      - "8000:8000"                # 暴露 API 端口
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/eve_db
+
+  eve-client:
+    volumes:
+      - ./eve-client-web:/app      # 挂载前端代码
+      - /app/node_modules          # 防止本地 node_modules 覆盖容器内的
+    ports:
+      - "5173:5173"                # 暴露 Vite 端口
+    environment:
+      - VITE_API_URL=http://localhost:8000

@@ -1,0 +1,32 @@
+services:
+  # 后端服务
+  ve-server:
+    build:
+      context: ./eve-server
+      dockerfile: Dockerfile
+    container_name: ve-server
+    networks:
+      - eve-network
+
+  # 前端服务
+  eve-client:
+    build:
+      context: ./eve-client-web
+      dockerfile: Dockerfile
+    container_name: eve-client
+    networks:
+      - eve-network
+
+  # 开发用数据库 (可选，如果不使用云端数据库)
+  db:
+    image: postgres:15
+    container_name: ve-postgres
+    environment:
+      POSTGRES_DB: eve_db
+      POSTGRES_PASSWORD: your_password
+    networks:
+      - eve-network
+
+networks:
+  eve-network:
+    driver: bridge
