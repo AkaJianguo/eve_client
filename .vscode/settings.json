@@ -1,22 +1,28 @@
 {
+    "python.defaultInterpreterPath": "/Users/wangjianguo/Desktop/EVE/eve_client/eve-server/.venv/bin/python",
+    "python.analysis.extraPaths": [
+        "/Users/wangjianguo/Desktop/EVE/eve_client/eve-server"
+    ],
+    "python.analysis.typeCheckingMode": "off",
+    "python.analysis.diagnosticMode": "workspace",
     "workbench.colorCustomizations": {
-        "activityBar.activeBackground": "#d11bfd",
-        "activityBar.background": "#d11bfd",
-        "activityBar.foreground": "#e7e7e7",
-        "activityBar.inactiveForeground": "#e7e7e799",
-        "activityBarBadge.background": "#5f4c01",
-        "activityBarBadge.foreground": "#e7e7e7",
-        "commandCenter.border": "#e7e7e799",
-        "sash.hoverBorder": "#d11bfd",
-        "statusBar.background": "#b702e3",
-        "statusBar.foreground": "#e7e7e7",
-        "statusBarItem.hoverBackground": "#d11bfd",
-        "statusBarItem.remoteBackground": "#b702e3",
-        "statusBarItem.remoteForeground": "#e7e7e7",
-        "titleBar.activeBackground": "#b702e3",
-        "titleBar.activeForeground": "#e7e7e7",
-        "titleBar.inactiveBackground": "#b702e399",
-        "titleBar.inactiveForeground": "#e7e7e799"
+        "activityBar.activeBackground": "#ce86e0",
+        "activityBar.background": "#ce86e0",
+        "activityBar.foreground": "#15202b",
+        "activityBar.inactiveForeground": "#15202b99",
+        "activityBarBadge.background": "#f2eacc",
+        "activityBarBadge.foreground": "#15202b",
+        "commandCenter.border": "#15202b99",
+        "sash.hoverBorder": "#ce86e0",
+        "statusBar.background": "#be5ed5",
+        "statusBar.foreground": "#15202b",
+        "statusBarItem.hoverBackground": "#ae36ca",
+        "statusBarItem.remoteBackground": "#be5ed5",
+        "statusBarItem.remoteForeground": "#15202b",
+        "titleBar.activeBackground": "#be5ed5",
+        "titleBar.activeForeground": "#15202b",
+        "titleBar.inactiveBackground": "#be5ed599",
+        "titleBar.inactiveForeground": "#15202b99"
     },
-    "peacock.color": "#b702e3"
+    "peacock.color": "#be5ed5"
 }

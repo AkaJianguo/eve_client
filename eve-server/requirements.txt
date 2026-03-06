@@ -25,7 +25,7 @@ python-multipart>=0.0.9
 # --- 网络请求 ---
 # 异步请求 ESI 接口必备，替代 requests
 httpx>=0.27.0
-
+aiohttp>=3.8.0
 # --- 工具类 ---
 # 加密敏感数据
 cryptography>=42.0.0

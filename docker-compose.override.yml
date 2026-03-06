@@ -6,7 +6,8 @@ services:
       - "8000:8000"                # 暴露 API 端口
     environment:
       - ENV=development
-      - DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/eve_db
+      # 当连接走宿主机的 SSH 隧道时，容器内必须使用 host.docker.internal 访问宿主机
+      - DATABASE_URL=postgresql+asyncpg://eve_admin:EveAdmin123!@host.docker.internal:5432/eve_db
 
   eve-client:
     volumes:

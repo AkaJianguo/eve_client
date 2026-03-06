@@ -1,0 +1,1 @@
+"""Placeholder package for future v2 schemas."""
