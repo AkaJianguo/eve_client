@@ -3,7 +3,7 @@ import urllib.parse
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,6 +67,7 @@ async def sso_login_redirect():
     },
 )
 async def sso_callback(
+    request: Request,
     params: Annotated[AuthCallbackParams, Query()],
     db: AsyncSession = Depends(get_db),
 ):
@@ -87,6 +88,17 @@ async def sso_callback(
     }
 
     access_token = create_access_token(data=jwt_payload)
+
+    accept_header = request.headers.get("accept", "")
+    if "text/html" in accept_header:
+        query = urllib.parse.urlencode(
+            {
+                "access_token": access_token,
+                "character_name": char_info["CharacterName"],
+                "user_id": user.id,
+            }
+        )
+        return RedirectResponse(url=f"{settings.FRONTEND_URL.rstrip('/')}/login/callback?{query}")
 
     return {
         "access_token": access_token,

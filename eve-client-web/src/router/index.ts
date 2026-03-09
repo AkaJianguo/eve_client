@@ -1,40 +1,57 @@
-// src/router/index.ts
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'Dashboard',
-    component: () => import('@/views/dashboard/Index.vue')
+    component: () => import('@/layouts/MainLayout.vue'),
+    redirect: '/dashboard',
+    children: [
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('@/views/Dashboard.vue'),
+        meta: { requiresAuth: true, title: '控制台' },
+      },
+      {
+        path: 'industry',
+        name: 'industry',
+        component: () => import('@/views/Industry.vue'),
+        meta: { requiresAuth: true, title: '工业监控' },
+      },
+    ],
   },
   {
-    path: '/billing',
-    name: 'Billing',
-    component: () => import('@/views/billing/Index.vue')
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/Login.vue'),
+    meta: { guestOnly: true, title: '登录' },
   },
   {
-    path: '/market',
-    name: 'Market',
-    component: () => import('@/views/market/Index.vue'),
-    meta: { requiresPremium: true } // 标记需要订阅的功能
-  }
-];
+    path: '/login/callback',
+    name: 'login-callback',
+    component: () => import('@/views/LoginCallback.vue'),
+    meta: { guestOnly: true, title: '登录回调' },
+  },
+]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
-});
+  routes,
+})
 
-// 全局守卫：处理付费订阅拦截
-router.beforeEach((to, from, next) => {
-  // 这里暂时写死为 true，后续对接 Pinia 的 userStore
-  const isPremium = true; 
+router.beforeEach((to) => {
+  const token = localStorage.getItem('eve_access_token')
 
-  if (to.meta.requiresPremium && !isPremium) {
-    next({ name: 'Billing' });
-  } else {
-    next();
+  if (!['/login', '/login/callback'].includes(to.path) && !token) {
+    return '/login'
   }
-});
 
-export default router;
+  if (to.meta.guestOnly && token) {
+    return '/dashboard'
+  }
+
+  return true
+})
+
+export { router }
+export default router

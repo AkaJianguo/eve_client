@@ -1,19 +1,22 @@
 services:
-  ve-server:
+  eve-server:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./eve-server:/app          # 挂载后端代码
     ports:
       - "8000:8000"                # 暴露 API 端口
+    env_file:
+      - ${EVE_SERVER_ENV_FILE:-./eve-server/.env.development}
     environment:
       - ENV=development
-      # 当连接走宿主机的 SSH 隧道时，容器内必须使用 host.docker.internal 访问宿主机
-      - DATABASE_URL=postgresql+asyncpg://eve_admin:EveAdmin123!@host.docker.internal:5432/eve_db
+      - FRONTEND_URL=http://127.0.0.1:5173
 
   eve-client:
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     volumes:
       - ./eve-client-web:/app      # 挂载前端代码
       - /app/node_modules          # 防止本地 node_modules 覆盖容器内的
     ports:
       - "5173:5173"                # 暴露 Vite 端口
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_PROXY_TARGET=http://eve-server:8000

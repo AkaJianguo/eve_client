@@ -118,6 +118,89 @@ flowchart TD
 
 ## 服务层说明
 
+## 本地开发启动方式
+
+当前后端支持两种本地开发方式。
+
+### 1. 本机直接运行
+
+适用于你先在宿主机建立 SSH 隧道，再直接运行 Python 服务：
+
+```bash
+cd eve-server
+source .venv/bin/activate
+
+ssh -p 22222 -N -L 5432:127.0.0.1:5432 ubuntu@43.163.228.205 -i ~/.ssh/NEW_Key.pem
+alembic upgrade head
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+这种模式下使用 `.env.development`，数据库地址保持 `localhost:5432`。
+
+### 2. Docker 开发模式
+
+如果后端运行在 Docker 容器内，容器不能再用 `localhost` 访问宿主机 SSH 隧道，而是要通过 `host.docker.internal`。
+
+当前仓库已经提供：
+
+- `.env.docker`：Docker 开发专用环境文件
+- `.env.docker.example`：示例模板
+
+启动步骤：
+
+```bash
+ssh -p 22222 -N -L 5432:127.0.0.1:5432 ubuntu@43.163.228.205 -i ~/.ssh/NEW_Key.pem
+EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
+```
+
+`.env.docker` 中的数据库连接串使用的是 `host.docker.internal:5432`，这正是为了访问宿主机上建立的 SSH 隧道。
+
+建议先单独开一个终端保持 SSH 隧道常驻，再在另一个终端执行 Docker 命令；如果 SSH 会话中断，容器内的后端会立即失去数据库连接。
+
+## 当前前后端联通状态
+
+当前后端已经和前端页面完成一轮真实联调，主要包括：
+
+- `GET /api/v1/auth/login`：跳转到 EVE 官方 SSO
+- `GET /api/v1/auth/callback`：浏览器场景下完成 JWT 签发后，重定向回前端 `/login/callback`
+- `GET /api/v1/users/me`：前端回调落地后读取当前用户状态
+- `GET /api/v1/industry/jobs/me`：前端 `Industry` 页面已接入真实数据
+
+这意味着当前后端不再只是 Swagger 可调试状态，而是已经承担真实的浏览器登录回调和前端业务页面数据来源。
+
+如果需要按步骤检查浏览器登录、JWT 落地、用户读取和 Industry 页面数据流，见仓库根目录文档：`API_INTEGRATION_CHECKLIST.md`。
+
+## 当前接口优先级建议
+
+如果继续配合前端推进，后端下一阶段最值得优先补的接口通常是：
+
+1. Dashboard 汇总接口
+2. Industry 列表的分页、排序、筛选参数
+3. Market 订单或价格查询接口
+4. Assets / Characters 相关接口
+
+建议优先做“汇总接口 + 列表分页”这一类前端收益最高的接口，而不是先扩太多零散 endpoint。
+
+## 前端对接重点
+
+当前前端已经依赖这些后端行为：
+
+- 401 时返回统一错误结构
+- 浏览器访问 `/api/v1/auth/callback` 时执行前端重定向
+- `/api/v1/users/me` 返回稳定字段
+- `/api/v1/industry/jobs/me` 返回前端可直接消费的名称扩展字段
+
+后续新增接口时，尽量延续这个风格，避免前端为单个接口写特殊适配逻辑。
+
+## 调试建议
+
+如果前端页面异常但 Swagger 正常，优先按下面顺序排查：
+
+1. 浏览器 Network 中请求是否走到 `/api/v1/...`
+2. Docker 或本机代理是否把 `/api` 正确转发到后端
+3. 后端是否返回 401 并触发前端登录跳转
+4. 接口响应字段是否和前端当前读取字段一致
+
 当前后端有两条外部 HTTP 服务链路：
 
 - `app/services/eve_esi.py`: 负责角色公开档案查询、Universe 名称解析、SDE + 本地缓存 + ESI 回退逻辑。

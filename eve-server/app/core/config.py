@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EVE-Server"
+    FRONTEND_URL: str = "http://127.0.0.1:5173"
     
     # 数据库配置
     # 注意：异步驱动必须使用 postgresql+asyncpg

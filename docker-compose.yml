@@ -1,32 +1,41 @@
 services:
-  # 后端服务
-  ve-server:
+  eve-server:
     build:
       context: ./eve-server
       dockerfile: Dockerfile
-    container_name: ve-server
+    container_name: eve-server
+    working_dir: /app
     networks:
       - eve-network
 
-  # 前端服务
   eve-client:
     build:
       context: ./eve-client-web
       dockerfile: Dockerfile
     container_name: eve-client
+    working_dir: /app
+    depends_on:
+      - eve-server
     networks:
       - eve-network
 
-  # 开发用数据库 (可选，如果不使用云端数据库)
   db:
     image: postgres:15
-    container_name: ve-postgres
+    container_name: eve-postgres
+    profiles:
+      - local-db
     environment:
       POSTGRES_DB: eve_db
+      POSTGRES_USER: eve_admin
       POSTGRES_PASSWORD: your_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - eve-network
 
 networks:
   eve-network:
     driver: bridge
+
+volumes:
+  postgres-data:
