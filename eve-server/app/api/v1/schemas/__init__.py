@@ -1,4 +1,5 @@
 from app.api.v1.schemas.auth import AuthCallbackParams, AuthCallbackResponse
+from app.api.v1.schemas.assets import AssetEntryResponse, AssetsResponse
 from app.api.v1.schemas.industry import (
     IndustryJobResponse,
     IndustryJobsQueryParams,
@@ -7,11 +8,20 @@ from app.api.v1.schemas.industry import (
 )
 from app.api.v1.schemas.universe import UniverseNamesRequest, UniverseNamesResponse
 from app.api.v1.schemas.users import CurrentUserResponse
+from app.api.v1.schemas.wallet import (
+    WalletBalanceResponse,
+    WalletJournalEntryResponse,
+    WalletJournalResponse,
+    WalletTransactionEntryResponse,
+    WalletTransactionsResponse,
+)
 
 
 __all__ = [
     "AuthCallbackParams",
     "AuthCallbackResponse",
+    "AssetEntryResponse",
+    "AssetsResponse",
     "CurrentUserResponse",
     "IndustryJobResponse",
     "IndustryJobsQueryParams",
@@ -19,4 +29,9 @@ __all__ = [
     "IndustryJobsResponse",
     "UniverseNamesRequest",
     "UniverseNamesResponse",
+    "WalletBalanceResponse",
+    "WalletJournalEntryResponse",
+    "WalletJournalResponse",
+    "WalletTransactionEntryResponse",
+    "WalletTransactionsResponse",
 ]

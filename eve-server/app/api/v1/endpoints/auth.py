@@ -40,7 +40,13 @@ async def sso_login_redirect():
         redirect_uri,
     )
 
-    scopes = "esi-industry.read_character_jobs.v1"
+    scopes = " ".join(
+        [
+            "esi-assets.read_assets.v1",
+            "esi-industry.read_character_jobs.v1",
+            "esi-wallet.read_character_wallet.v1",
+        ]
+    )
     state = str(uuid.uuid4())
 
     params = {

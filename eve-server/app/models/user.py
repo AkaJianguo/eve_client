@@ -3,6 +3,8 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .base import Base
 from sqlalchemy import Column, Boolean
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -58,3 +60,7 @@ class Character(Base):
 
     # 关联反向映射
     owner = relationship("User", back_populates="characters")
+    wallet_balance = relationship("CharacterWalletBalance", back_populates="character", uselist=False, cascade="all, delete-orphan")
+    wallet_journal_entries = relationship("CharacterWalletJournalEntry", back_populates="character", cascade="all, delete-orphan")
+    wallet_transactions = relationship("CharacterWalletTransaction", back_populates="character", cascade="all, delete-orphan")
+    assets = relationship("CharacterAsset", back_populates="character", cascade="all, delete-orphan")

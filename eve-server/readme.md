@@ -17,7 +17,8 @@ eve-server/
 │   ├── README                       # Alembic 默认说明文件
 │   ├── script.py.mako               # 迁移文件模板
 │   └── versions/                    # 历史迁移版本
-│       └── 9bf3d1e1abb4_initial_schema.py
+│       ├── 9bf3d1e1abb4_initial_schema.py
+│       └── 0d3e7a1f6c2a_add_wallet_and_assets_tables.py
 └── app/                             # FastAPI 应用主体
     ├── main.py                      # FastAPI 程序入口与路由挂载
     ├── database.py                  # 异步数据库引擎与 Session 工厂
@@ -30,16 +31,20 @@ eve-server/
     │   │   ├── router.py            # v1 路由聚合入口
     │   │   ├── endpoints/           # 按业务拆分的接口文件
     │   │   │   ├── __init__.py
+    │   │   │   ├── assets.py        # 角色资产相关接口
     │   │   │   ├── auth.py          # EVE SSO 登录与回调
     │   │   │   ├── industry.py      # 工业任务相关接口
     │   │   │   ├── universe.py      # Universe 名称解析接口
-    │   │   │   └── users.py         # 当前用户信息接口
+    │   │   │   ├── users.py         # 当前用户信息接口
+    │   │   │   └── wallet.py        # 角色钱包相关接口
     │   │   └── schemas/             # v1 接口的请求/响应模型
     │   │       ├── __init__.py
+    │   │       ├── assets.py
     │   │       ├── auth.py
     │   │       ├── industry.py
     │   │       ├── universe.py
-    │   │       └── users.py
+    │   │       ├── users.py
+    │   │       └── wallet.py
     │   └── v2/                      # 预留给未来版本升级的占位目录
     │       ├── __init__.py
     │       ├── router.py
@@ -52,10 +57,12 @@ eve-server/
     │   └── security.py              # JWT 签发逻辑
     ├── crud/                        # 数据访问层
     │   ├── __init__.py
+    │   ├── character_ops.py         # 资产与钱包同步写库逻辑
     │   └── user.py                  # 用户与角色写库逻辑
     ├── models/                      # SQLAlchemy ORM 模型层
     │   ├── __init__.py              # 聚合所有模型，供 Alembic 扫描
     │   ├── base.py                  # Declarative Base
+    │   ├── operations.py            # 角色资产、钱包余额、钱包日记、钱包交易模型
     │   ├── universe.py              # UniverseName 模型
     │   └── user.py                  # User / Character 模型
     ├── schemas/                     # 预留给跨版本复用的共享 Schema
@@ -78,14 +85,18 @@ flowchart TD
     ApiRouter --> V1Router[app/api/v1/router.py]
     ApiRouter --> V2Router[app/api/v2/router.py]
 
+    V1Router --> Assets[app/api/v1/endpoints/assets.py]
     V1Router --> Auth[app/api/v1/endpoints/auth.py]
     V1Router --> Users[app/api/v1/endpoints/users.py]
     V1Router --> Industry[app/api/v1/endpoints/industry.py]
     V1Router --> Universe[app/api/v1/endpoints/universe.py]
+    V1Router --> Wallet[app/api/v1/endpoints/wallet.py]
 
     Auth --> SSO[app/services/eve_sso.py]
     Auth --> ESI[app/services/eve_esi.py]
     Auth --> UserCrud[app/crud/user.py]
+    Assets --> OpsCrud[app/crud/character_ops.py]
+    Wallet --> OpsCrud
 
     Users --> Deps[app/api/deps.py]
     Deps --> UserModel[app/models/user.py]
@@ -94,6 +105,7 @@ flowchart TD
     Industry --> ESI
     Universe --> ESI
     ESI --> UniverseModel[app/models/universe.py]
+    OpsCrud --> OpsModel[app/models/operations.py]
 
     Database --> Postgres[(PostgreSQL)]
 
@@ -103,7 +115,7 @@ flowchart TD
 
 ## 目录分析
 
-- `alembic/`: 数据库迁移系统，当前初始迁移已经落在 `versions/9bf3d1e1abb4_initial_schema.py`。
+- `alembic/`: 数据库迁移系统，当前已有初始迁移和 `0d3e7a1f6c2a_add_wallet_and_assets_tables.py`，后者用于创建资产与钱包持久化表。
 - `app/api/`: 版本化 API 入口层，当前通过 `app/api/router.py` 统一聚合 v1 与预留的 v2 路由。
 - `app/api/v1/endpoints/`: 按功能拆分的接口目录，后续新增模块直接在这里落文件。
 - `app/api/v1/schemas/`: v1 接口请求/响应模型，Swagger、请求校验和返回结构约束以这里为准。
@@ -165,6 +177,23 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 - `GET /api/v1/auth/callback`：浏览器场景下完成 JWT 签发后，重定向回前端 `/login/callback`
 - `GET /api/v1/users/me`：前端回调落地后读取当前用户状态
 - `GET /api/v1/industry/jobs/me`：前端 `Industry` 页面已接入真实数据
+- `GET /api/v1/wallet/balance` / `journal` / `transactions`：前端 `Wallet` 页面已接入
+- `GET /api/v1/assets/me`：前端 `Assets` 页面已接入真实数据
+
+当前钱包接口还额外具备以下行为：
+
+- 优先从数据库读取余额、财务日记和市场交易缓存
+- 缓存过期时先返回旧值，再后台异步刷新，避免前端长时间等待 ESI
+- 冷启动无缓存时才同步请求一次 ESI 并回写数据库
+- 接口响应附带 `cache_status`，供前端展示缓存命中状态
+- 服务生命周期内会定期预热最近活跃角色的钱包缓存
+
+当前数据库也已经具备以下持久化表：
+
+- `character_wallet_balances`
+- `character_wallet_journal_entries`
+- `character_wallet_transactions`
+- `character_assets`
 
 这意味着当前后端不再只是 Swagger 可调试状态，而是已经承担真实的浏览器登录回调和前端业务页面数据来源。
 
@@ -177,7 +206,7 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 1. Dashboard 汇总接口
 2. Industry 列表的分页、排序、筛选参数
 3. Market 订单或价格查询接口
-4. Assets / Characters 相关接口
+4. Wallet / Assets 的时间范围过滤、位置树还原和价值估算
 
 建议优先做“汇总接口 + 列表分页”这一类前端收益最高的接口，而不是先扩太多零散 endpoint。
 
@@ -189,6 +218,22 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 - 浏览器访问 `/api/v1/auth/callback` 时执行前端重定向
 - `/api/v1/users/me` 返回稳定字段
 - `/api/v1/industry/jobs/me` 返回前端可直接消费的名称扩展字段
+- `/api/v1/wallet/*` 返回适合前端表格直接消费的 entries / transactions 结构
+- `/api/v1/assets/me` 返回适合前端表格直接消费的 assets 结构和名称扩展字段
+
+当前 `Wallet` 和 `Assets` 接口还额外承担两件事：
+
+- 在请求 ESI 后把结果同步写入本地数据库
+- 对前端暴露服务端分页与汇总字段，避免浏览器一次吞掉过大结果集
+
+`Wallet` 在此基础上又新增了一层缓存编排逻辑：
+
+- `balance`、`journal`、`transactions` 三个接口都会先查本地库
+- 命中新鲜缓存时直接返回
+- 命中过期缓存时返回旧数据，并通过后台任务刷新该角色的对应缓存
+- 如果本地完全没有缓存，才会走一次同步 ESI 请求
+
+这让前端大多数场景下不再直接受 ESI 响应时延影响。
 
 后续新增接口时，尽量延续这个风格，避免前端为单个接口写特殊适配逻辑。
 
@@ -230,6 +275,18 @@ EVE 的 `access_token` 有较短有效期，因此不要假设数据库里保存
 2. 如果 token 已过期或即将过期，会自动调用 `sso_service.refresh_access_token(...)`
 3. 刷新成功后，新的 `access_token`、`refresh_token`、`token_expires` 会自动写回数据库
 
+当前还会一并更新 `characters.scopes`，这样可以记录角色最近一次授权所拥有的 ESI scope，便于排查为什么某些角色能看工业但不能看资产或钱包。
+
+## 当前 SSO Scope
+
+当前登录会申请以下 ESI scope：
+
+- `esi-industry.read_character_jobs.v1`
+- `esi-wallet.read_character_wallet.v1`
+- `esi-assets.read_assets.v1`
+
+如果数据库里已有旧角色和旧 refresh token，但它们是在本次 scope 扩充前授权的，用户必须重新完成一次 EVE SSO 登录，否则 ESI 上游仍可能拒绝 wallet 或 assets 请求。
+
 这可以避免在每个业务接口里重复手写 token 过期判断逻辑。
 
 ## Schema 约定
@@ -245,6 +302,58 @@ EVE 的 `access_token` 有较短有效期，因此不要假设数据库里保存
 - `app/api/v1/schemas/industry.py` 中的 `IndustryJobStatus`：把工业任务状态定义为枚举，并补充 `status_label`。
 - `app/api/v1/schemas/industry.py` 中的时间字段：例如 `start_date`、`end_date`、`pause_date`、`completed_date` 会在 schema 校验阶段转换为标准时间对象。
 - `app/api/v1/endpoints/industry.py` 中的名称扩展字段：`blueprint_name`、`product_name`、`facility_name` 等会在返回前补齐。
+- `app/api/v1/schemas/wallet.py`：定义钱包余额、日记、交易记录以及分页/统计字段。
+- `app/api/v1/schemas/assets.py`：定义资产列表、资产汇总、位置坐标与资产自定义名字段。
+
+## 资产与钱包入库策略
+
+当前项目对资产和钱包采用“请求 ESI + 同步落库 + 返回前端”的模式：
+
+- 钱包余额：入 `character_wallet_balances`
+- 钱包日记：按 `id` 入 `character_wallet_journal_entries`
+- 钱包交易：按 `transaction_id` 入 `character_wallet_transactions`
+- 角色资产：按 `item_id` 入 `character_assets`
+
+其中钱包链路现在升级为“缓存优先 + 回源刷新”的模式：
+
+- 钱包余额缓存表：`character_wallet_balances`
+- 钱包日记缓存表：`character_wallet_journal_entries`
+- 钱包交易缓存表：`character_wallet_transactions`
+
+具体返回策略如下：
+
+- 缓存新鲜：直接返回数据库数据，`cache_status=hit_fresh`
+- 缓存过期：返回数据库旧数据，并异步刷新，`cache_status=stale_refreshing`
+- 缓存缺失：同步拉取 ESI 后写库再返回，`cache_status=miss_refreshed`
+
+这样既保留了本地持久化能力，也把接口响应时间控制在更稳定的范围内。
+
+## Wallet 缓存配置
+
+钱包缓存和预热的主要配置位于 `app/core/config.py`：
+
+- `WALLET_BALANCE_CACHE_TTL_SECONDS`：余额缓存 TTL，默认 60 秒
+- `WALLET_JOURNAL_CACHE_TTL_SECONDS`：财务日记缓存 TTL，默认 300 秒
+- `WALLET_TRANSACTIONS_CACHE_TTL_SECONDS`：市场交易缓存 TTL，默认 300 秒
+- `WALLET_CACHE_WARMUP_ENABLED`：是否启用钱包缓存预热，默认开启
+- `WALLET_CACHE_WARMUP_INTERVAL_SECONDS`：预热任务执行间隔，默认 300 秒
+- `WALLET_CACHE_WARMUP_BATCH_SIZE`：每轮预热的角色数量，默认 20
+
+预热逻辑挂在 `app/main.py` 的 `lifespan` 中，服务启动后会循环刷新最近活跃、且仍可自动续期 token 的角色钱包缓存。
+
+其中资产除了基础 `/assets/` 列表，还会额外调用：
+
+- `/assets/locations/` 获取坐标
+- `/assets/names/` 获取可自定义名称的飞船、货柜等名称
+
+所以 `character_assets` 里除了基础 ESI 字段，还额外持久化了：
+
+- `name`
+- `position_x`
+- `position_y`
+- `position_z`
+
+这也是当前前端可以直接展示深层位置名称和资产自定义名的原因。
 
 ## 错误响应约定
 

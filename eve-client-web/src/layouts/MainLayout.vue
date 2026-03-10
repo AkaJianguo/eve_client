@@ -12,7 +12,7 @@ import {
   NTag,
   type MenuOption,
 } from 'naive-ui'
-import { Factory, LayoutDashboard, LogOut, Orbit } from 'lucide-vue-next'
+import { Boxes, Factory, LayoutDashboard, LogOut, Orbit, User, Wallet } from 'lucide-vue-next'
 
 import { useAuthStore } from '@/stores/auth'
 
@@ -23,6 +23,21 @@ const authStore = useAuthStore()
 const renderIcon = (icon: typeof LayoutDashboard) => () => h(NIcon, null, { default: () => h(icon) })
 
 const menuOptions: MenuOption[] = [
+  {
+    label: () => h(RouterLink, { to: '/profile' }, { default: () => '飞行员档案' }),
+    key: '/profile',
+    icon: renderIcon(User),
+  },
+  {
+    label: () => h(RouterLink, { to: '/wallet' }, { default: () => '财务中心' }),
+    key: '/wallet',
+    icon: renderIcon(Wallet),
+  },
+  {
+    label: () => h(RouterLink, { to: '/assets' }, { default: () => '资产清单' }),
+    key: '/assets',
+    icon: renderIcon(Boxes),
+  },
   {
     label: () => h(RouterLink, { to: '/dashboard' }, { default: () => '控制台' }),
     key: '/dashboard',

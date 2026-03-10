@@ -1,23 +1,52 @@
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api import api_router
+from app.api.v1.endpoints.wallet import warm_wallet_cache_for_active_characters
 from app.schemas import ErrorResponse, HealthResponse, ValidationErrorItem, ValidationErrorResponse
 from .core.config import settings
 from app.services.eve_esi import esi_service
 from app.services.eve_sso import sso_service
 
 
+logger = logging.getLogger(__name__)
+
+
+async def _wallet_cache_warmup_loop() -> None:
+    while True:
+        try:
+            refreshed_count = await warm_wallet_cache_for_active_characters(settings.WALLET_CACHE_WARMUP_BATCH_SIZE)
+            logger.info("wallet cache warmup finished: refreshed_characters=%s", refreshed_count)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("wallet cache warmup loop failed")
+
+        await asyncio.sleep(settings.WALLET_CACHE_WARMUP_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    wallet_warmup_task: asyncio.Task[None] | None = None
     await esi_service.start()
     await sso_service.start()
+
+    # 预热任务在服务启动后立即跑一轮，此后按固定间隔刷新活跃角色的钱包缓存。
+    if settings.WALLET_CACHE_WARMUP_ENABLED:
+        wallet_warmup_task = asyncio.create_task(_wallet_cache_warmup_loop())
+
     try:
         yield
     finally:
+        if wallet_warmup_task is not None:
+            wallet_warmup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await wallet_warmup_task
         await esi_service.close()
         await sso_service.close()
 

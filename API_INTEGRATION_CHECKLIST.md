@@ -9,6 +9,8 @@
 - JWT 写入前端
 - 当前用户读取
 - Industry 页面真实数据读取
+- Wallet 页面真实数据读取
+- Assets 页面真实数据读取
 
 ## 0. 启动前置条件
 
@@ -52,7 +54,9 @@ curl -I http://127.0.0.1:5173
 2. 后端签发本站 JWT
 3. 后端重定向到前端 `/login/callback`
 4. 前端回调页写入 token 并拉取 `/api/v1/users/me`
-5. 浏览器最终跳到 `/dashboard`
+5. 浏览器最终跳到 `/profile`
+
+注意：当前登录已经扩展了钱包和资产所需 scope。如果你在较早版本已经登录过，需要重新完成一次 EVE SSO 授权，否则后续 Wallet 和 Assets 页面会因为 scope 不足而失败。
 
 如果这里失败，优先检查：
 
@@ -102,7 +106,61 @@ curl -I http://127.0.0.1:5173
 - 返回 JSON 里是否包含 `jobs`
 - 前端字段读取是否和后端返回字段一致
 
-## 5. 常见故障速查
+## 5. Wallet 页面检查
+
+浏览器访问：
+
+- `http://127.0.0.1:5173/wallet`
+
+前端会请求：
+
+- `GET /api/v1/wallet/balance`
+- `GET /api/v1/wallet/journal?page=1&page_size=...`
+- `GET /api/v1/wallet/transactions?page=1&page_size=...`
+
+预期行为：
+
+- 余额卡片显示 ISK 数值
+- 财务日记和市场交易表格正常加载
+- 切换分页时会重新请求后端，而不是只做本地翻页
+- 请求失败时页面展示 warning，而不是白屏
+
+如果这里失败，优先检查：
+
+- 当前角色是否重新授权并具备 `esi-wallet.read_character_wallet.v1`
+- 后端是否能访问 ESI 钱包接口
+- 数据库迁移是否已经执行到最新版本
+
+## 6. Assets 页面检查
+
+浏览器访问：
+
+- `http://127.0.0.1:5173/assets`
+
+前端会请求：
+
+- `GET /api/v1/assets/me?page=1&page_size=...`
+
+后端还会向 ESI 请求：
+
+- `GET /characters/{character_id}/assets`
+- `POST /characters/{character_id}/assets/locations`
+- `POST /characters/{character_id}/assets/names`
+
+预期行为：
+
+- 资产表格正常加载
+- 蓝图数、唯一实例数、数量总和统计卡片正常显示
+- 部分飞船或货柜会显示自定义名称
+- 翻页会触发新的后端分页请求
+
+如果这里失败，优先检查：
+
+- 当前角色是否重新授权并具备 `esi-assets.read_assets.v1`
+- 数据库是否已经完成新增资产和钱包表的迁移
+- 某些 `location_id` 是否属于容器内部实例；这种情况下前端允许回退显示 `ID: xxxxx`
+
+## 7. 常见故障速查
 
 ### 登录后跳回登录页
 
@@ -111,6 +169,14 @@ curl -I http://127.0.0.1:5173
 - `/login/callback` 没拿到 `access_token`
 - token 写入失败
 - `/users/me` 返回 401
+
+### Wallet 或 Assets 一直 403 / 502
+
+通常原因：
+
+- 角色是在扩充 scope 之前登录的，旧 token 没有钱包或资产权限
+- 没有重新走 EVE SSO 授权
+- 后端已经更新，但数据库迁移没跑
 
 ### 后端在 Docker 里无法连数据库
 
@@ -127,7 +193,7 @@ curl -I http://127.0.0.1:5173
 - Vite 代理目标未指向后端
 - Docker 网络中的前端没有把 `/api` 代理到 `eve-server`
 
-## 6. 建议排查顺序
+## 8. 建议排查顺序
 
 如果前后端联调出问题，按下面顺序最省时间：
 
@@ -135,9 +201,9 @@ curl -I http://127.0.0.1:5173
 2. 看后端容器日志或 uvicorn 日志
 3. 看 `/health`
 4. 看 `/docs`
-5. 单独调用 `/users/me` 或 `/industry/jobs/me`
+5. 单独调用 `/users/me`、`/industry/jobs/me`、`/wallet/balance`、`/assets/me`
 
-## 7. 当前已验证状态
+## 9. 当前已验证状态
 
 截至当前仓库状态，以下内容已验证：
 
@@ -146,3 +212,5 @@ curl -I http://127.0.0.1:5173
 - 前端 5173 可访问
 - 浏览器登录可完成
 - Industry 页面可读取真实接口
+- Wallet 和 Assets 路由已注册
+- 数据库迁移已升级到包含资产和钱包表的最新版本

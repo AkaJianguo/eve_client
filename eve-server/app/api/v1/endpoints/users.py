@@ -21,10 +21,26 @@ router = APIRouter(prefix="/api/v1/users", tags=["Users"])
     },
 )
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    """获取当前登录玩家的个人底层信息。"""
+    """获取当前登录玩家的个人底层信息及其主要角色信息。"""
+    character_info = None
+    
+    # 获取该用户的第一个角色信息（主角）
+    if current_user.characters and len(current_user.characters) > 0:
+        char = current_user.characters[0]
+        character_info = {
+            "id": char.id,
+            "name": char.name,
+            "corporation_id": char.corporation_id,
+            "alliance_id": char.alliance_id,
+            "security_status": char.security_status,
+            "birthday": char.birthday,
+        }
+    
     return {
         "msg": "欢迎来到个人中心！这是你的底层账户信息",
         "user_id": current_user.id,
         "sub_level": current_user.sub_level,
         "is_active": current_user.is_active,
+        "last_login_at": current_user.last_login_at,
+        "character": character_info,
     }

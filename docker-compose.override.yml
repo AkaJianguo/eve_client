@@ -1,12 +1,12 @@
 services:
   eve-server:
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-config logging.json
     volumes:
       - ./eve-server:/app          # 挂载后端代码
     ports:
       - "8000:8000"                # 暴露 API 端口
     env_file:
-      - ${EVE_SERVER_ENV_FILE:-./eve-server/.env.development}
+      - ${EVE_SERVER_ENV_FILE:-./eve-server/.env.docker}
     environment:
       - ENV=development
       - FRONTEND_URL=http://127.0.0.1:5173

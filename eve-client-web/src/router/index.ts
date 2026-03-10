@@ -4,8 +4,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
-    redirect: '/dashboard',
+    redirect: '/profile',
     children: [
+      {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('@/views/Profile.vue'),
+        meta: { requiresAuth: true, title: '飞行员档案' },
+      },
       {
         path: 'dashboard',
         name: 'dashboard',
@@ -17,6 +23,18 @@ const routes: RouteRecordRaw[] = [
         name: 'industry',
         component: () => import('@/views/Industry.vue'),
         meta: { requiresAuth: true, title: '工业监控' },
+      },
+      {
+        path: 'wallet',
+        name: 'wallet',
+        component: () => import('@/views/Wallet.vue'),
+        meta: { requiresAuth: true, title: '财务中心' },
+      },
+      {
+        path: 'assets',
+        name: 'assets',
+        component: () => import('@/views/Assets.vue'),
+        meta: { requiresAuth: true, title: '资产清单' },
       },
     ],
   },
@@ -47,7 +65,7 @@ router.beforeEach((to) => {
   }
 
   if (to.meta.guestOnly && token) {
-    return '/dashboard'
+    return '/profile'
   }
 
   return true

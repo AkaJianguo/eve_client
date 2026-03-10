@@ -6,6 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 import os
 
 from app.core.errors import api_error
@@ -83,8 +84,12 @@ async def get_current_user(
     payload = _decode_access_token(token)
     user_id = payload.get("sub")
 
-    # 去数据库里确认这个用户是不是真的存在
-    result = await db.execute(select(User).filter(User.id == int(user_id)))
+    # 去数据库里确认这个用户是不是真的存在，并加载其关联的角色数据
+    result = await db.execute(
+        select(User)
+        .filter(User.id == int(user_id))
+        .options(selectinload(User.characters))  # 👈 eager load 所有关联角色
+    )
     user = result.scalar_one_or_none()
     
     if user is None:

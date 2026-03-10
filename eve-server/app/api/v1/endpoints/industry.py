@@ -67,12 +67,17 @@ async def read_my_industry_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     """读取当前登录角色的工业任务，并在请求前自动刷新即将过期的 ESI Token。"""
-    if not current_character.access_token:
+    user_id = int(current_user.id)
+    character_id = int(current_character.id)
+    character_name = current_character.name
+    access_token = current_character.access_token
+
+    if not access_token:
         raise api_error(401, "character_token_missing", "当前角色缺少可用的 ESI 访问令牌，请重新授权")
 
     jobs = await esi_service.get_character_industry_jobs(
-        character_id=int(current_character.id),
-        access_token=current_character.access_token,
+        character_id=character_id,
+        access_token=access_token,
         include_completed=params.include_completed,
     )
     if jobs is None:
@@ -96,9 +101,9 @@ async def read_my_industry_jobs(
         enriched_jobs.append(enriched_job)
 
     return {
-        "user_id": current_user.id,
-        "character_id": int(current_character.id),
-        "character_name": current_character.name,
+        "user_id": user_id,
+        "character_id": character_id,
+        "character_name": character_name,
         "job_count": len(enriched_jobs),
         "jobs": enriched_jobs,
     }

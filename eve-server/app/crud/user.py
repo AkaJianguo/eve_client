@@ -14,6 +14,7 @@ async def process_sso_login(db: AsyncSession, char_info: dict, token_data: dict,
     """处理 SSO 登录的数据库 Upsert 逻辑 (全异步版本)"""
     character_id = char_info["CharacterID"]
     character_name = char_info["CharacterName"]
+    granted_scopes = token_data.get("scope") or char_info.get("Scopes")
     
     expire_time = _build_token_expire_time(token_data)
 
@@ -26,6 +27,7 @@ async def process_sso_login(db: AsyncSession, char_info: dict, token_data: dict,
         db_char.access_token = token_data["access_token"]
         db_char.refresh_token = token_data.get("refresh_token")
         db_char.token_expires = expire_time
+        db_char.scopes = granted_scopes
         await db.commit()
         
         # 获取对应的 User
@@ -53,6 +55,7 @@ async def process_sso_login(db: AsyncSession, char_info: dict, token_data: dict,
             access_token=token_data["access_token"],
             refresh_token=token_data.get("refresh_token"),
             token_expires=expire_time
+            ,scopes=granted_scopes
         )
         db.add(new_char)
         await db.commit()
@@ -90,6 +93,7 @@ async def ensure_character_access_token(
     character.access_token = token_data["access_token"]
     character.refresh_token = token_data.get("refresh_token", character.refresh_token)
     character.token_expires = _build_token_expire_time(token_data)
+    character.scopes = token_data.get("scope", character.scopes)
 
     await db.commit()
     await db.refresh(character)

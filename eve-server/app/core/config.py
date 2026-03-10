@@ -3,6 +3,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EVE-Server"
     FRONTEND_URL: str = "http://127.0.0.1:5173"
+    WALLET_BALANCE_CACHE_TTL_SECONDS: int = 60
+    WALLET_JOURNAL_CACHE_TTL_SECONDS: int = 300
+    WALLET_TRANSACTIONS_CACHE_TTL_SECONDS: int = 300
+    WALLET_CACHE_WARMUP_ENABLED: bool = True
+    WALLET_CACHE_WARMUP_INTERVAL_SECONDS: int = 300
+    WALLET_CACHE_WARMUP_BATCH_SIZE: int = 20
     
     # 数据库配置
     # 注意：异步驱动必须使用 postgresql+asyncpg
