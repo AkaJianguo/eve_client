@@ -36,6 +36,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Assets.vue'),
         meta: { requiresAuth: true, title: '资产清单' },
       },
+      {
+        path: 'market',
+        name: 'market',
+        component: () => import('@/views/Market.vue'),
+        meta: { requiresAuth: true, title: '市场情报' },
+      },
+      {
+        path: 'market-browser',
+        name: 'market-browser',
+        component: () => import('@/views/MarketBrowser.vue'),
+        meta: { requiresAuth: true, title: '市场浏览器' },
+      },
     ],
   },
   {

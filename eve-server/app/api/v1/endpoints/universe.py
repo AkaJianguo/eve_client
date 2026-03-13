@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/v1/universe", tags=["Universe"])
     "/names",
     response_model=UniverseNamesResponse,
     summary="批量翻译 EVE ID",
-    description="接收一组 EVE 相关 ID，优先走 SDE、本地缓存，再回退到 ESI 批量解析名称。适合前端做角色、地点、物品和设施名称展示。",
+    description="接收一组 EVE 相关 ID，优先走 L1 内存缓存，再查 sde.vw_universal_names 与本地 UniverseName 缓存表，最后才回退到 ESI 批量解析名称。适合前端做角色、地点、物品和设施名称展示。",
     responses={
         200: {"description": "成功返回 ID 到名称的映射结果"},
         422: {"description": "请求体缺失、ID 数组为空、数量超限或包含非法值", "model": ValidationErrorResponse},

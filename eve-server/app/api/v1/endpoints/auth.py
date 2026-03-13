@@ -35,7 +35,7 @@ async def sso_login_redirect():
     redirect_uri = settings.ESI_CALLBACK_URL
 
     logger.info(
-        "Preparing EVE SSO redirect: client_id_configured=%s redirect_uri=%s",
+        "🚪 [Auth] 准备跳转到 EVE SSO：客户端已配置=%s，回调地址=%s",
         bool(client_id),
         redirect_uri,
     )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   NButton,
@@ -12,7 +12,7 @@ import {
   NTag,
   type MenuOption,
 } from 'naive-ui'
-import { Boxes, Factory, LayoutDashboard, LogOut, Orbit, User, Wallet } from 'lucide-vue-next'
+import { Boxes, Factory, LayoutDashboard, LineChart, LogOut, Orbit, Search, User, Wallet } from 'lucide-vue-next'
 
 import { useAuthStore } from '@/stores/auth'
 
@@ -39,6 +39,23 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(Boxes),
   },
   {
+    label: '市场中心',
+    key: 'market-center',
+    icon: renderIcon(LineChart),
+    children: [
+      {
+        label: () => h(RouterLink, { to: '/market' }, { default: () => '市场情报' }),
+        key: '/market',
+        icon: renderIcon(LineChart),
+      },
+      {
+        label: () => h(RouterLink, { to: '/market-browser' }, { default: () => '市场浏览器' }),
+        key: '/market-browser',
+        icon: renderIcon(Search),
+      },
+    ],
+  },
+  {
     label: () => h(RouterLink, { to: '/dashboard' }, { default: () => '控制台' }),
     key: '/dashboard',
     icon: renderIcon(LayoutDashboard),
@@ -51,7 +68,22 @@ const menuOptions: MenuOption[] = [
 ]
 
 const activeKey = computed(() => route.path)
+const expandedKeys = ref<string[]>(route.path.startsWith('/market') ? ['market-center'] : [])
 const pilotName = computed(() => authStore.character?.name || '未识别飞行员')
+
+watch(
+  () => route.path,
+  (path) => {
+    if (path.startsWith('/market') && !expandedKeys.value.includes('market-center')) {
+      expandedKeys.value = [...expandedKeys.value, 'market-center']
+    }
+  },
+  { immediate: true },
+)
+
+function handleUpdateExpandedKeys(keys: string[]) {
+  expandedKeys.value = keys
+}
 
 async function handleLogout() {
   authStore.logout()
@@ -81,6 +113,8 @@ async function handleLogout() {
       <n-menu
         :value="activeKey"
         :options="menuOptions"
+        :expanded-keys="expandedKeys"
+        @update:expanded-keys="handleUpdateExpandedKeys"
         :collapsed-width="72"
         :collapsed-icon-size="22"
         :class="$style.menu"

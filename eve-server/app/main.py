@@ -21,11 +21,11 @@ async def _wallet_cache_warmup_loop() -> None:
     while True:
         try:
             refreshed_count = await warm_wallet_cache_for_active_characters(settings.WALLET_CACHE_WARMUP_BATCH_SIZE)
-            logger.info("wallet cache warmup finished: refreshed_characters=%s", refreshed_count)
+            logger.info("🔥 [Wallet] 钱包缓存预热完成：已刷新角色数=%s", refreshed_count)
         except asyncio.CancelledError:
             raise
         except Exception:
-            logger.exception("wallet cache warmup loop failed")
+            logger.exception("💥 [Wallet] 钱包缓存预热循环执行失败")
 
         await asyncio.sleep(settings.WALLET_CACHE_WARMUP_INTERVAL_SECONDS)
 

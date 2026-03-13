@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     WALLET_CACHE_WARMUP_ENABLED: bool = True
     WALLET_CACHE_WARMUP_INTERVAL_SECONDS: int = 300
     WALLET_CACHE_WARMUP_BATCH_SIZE: int = 20
+    MARKET_HISTORY_DEFAULT_REGION_ID: int = 10000002
+    MARKET_HISTORY_STALE_AFTER_DAYS: int = 1
     
     # 数据库配置
     # 注意：异步驱动必须使用 postgresql+asyncpg

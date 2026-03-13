@@ -9,7 +9,7 @@ services:
     # 生产环境通常不映射端口到宿主机，而是通过 Nginx 反代
 
   eve-client:
-    command: sh -c "npm install && npm run build && npm run preview -- --host 0.0.0.0 --port 4173"
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm build && pnpm preview --host 0.0.0.0 --port 4173"
     restart: always
     environment:
       - VITE_PROXY_TARGET=http://eve-server:8000

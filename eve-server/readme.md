@@ -34,6 +34,8 @@ eve-server/
     │   │   │   ├── assets.py        # 角色资产相关接口
     │   │   │   ├── auth.py          # EVE SSO 登录与回调
     │   │   │   ├── industry.py      # 工业任务相关接口
+    │   │   │   ├── market.py        # 市场历史查询与缓存接口
+    │   │   │   ├── sde.py           # SDE 市场分类树与物品检索接口
     │   │   │   ├── universe.py      # Universe 名称解析接口
     │   │   │   ├── users.py         # 当前用户信息接口
     │   │   │   └── wallet.py        # 角色钱包相关接口
@@ -42,6 +44,8 @@ eve-server/
     │   │       ├── assets.py
     │   │       ├── auth.py
     │   │       ├── industry.py
+    │   │       ├── market.py
+    │   │       ├── sde.py
     │   │       ├── universe.py
     │   │       ├── users.py
     │   │       └── wallet.py
@@ -64,6 +68,8 @@ eve-server/
     │   ├── base.py                  # Declarative Base
     │   ├── operations.py            # 角色资产、钱包余额、钱包日记、钱包交易模型
     │   ├── universe.py              # UniverseName 模型
+    │   ├── market.py                # 市场历史模型
+    │   ├── sde.py                   # SDE 静态数据只读映射
     │   └── user.py                  # User / Character 模型
     ├── schemas/                     # 预留给跨版本复用的共享 Schema
     ├── services/                    # 外部服务封装层
@@ -89,6 +95,8 @@ flowchart TD
     V1Router --> Auth[app/api/v1/endpoints/auth.py]
     V1Router --> Users[app/api/v1/endpoints/users.py]
     V1Router --> Industry[app/api/v1/endpoints/industry.py]
+    V1Router --> Market[app/api/v1/endpoints/market.py]
+    V1Router --> SDE[app/api/v1/endpoints/sde.py]
     V1Router --> Universe[app/api/v1/endpoints/universe.py]
     V1Router --> Wallet[app/api/v1/endpoints/wallet.py]
 
@@ -97,6 +105,8 @@ flowchart TD
     Auth --> UserCrud[app/crud/user.py]
     Assets --> OpsCrud[app/crud/character_ops.py]
     Wallet --> OpsCrud
+    Market --> ESI
+    Market --> OpsModel
 
     Users --> Deps[app/api/deps.py]
     Deps --> UserModel[app/models/user.py]
@@ -115,7 +125,7 @@ flowchart TD
 
 ## 目录分析
 
-- `alembic/`: 数据库迁移系统，当前已有初始迁移和 `0d3e7a1f6c2a_add_wallet_and_assets_tables.py`，后者用于创建资产与钱包持久化表。
+- `alembic/`: 数据库迁移系统，当前已有初始迁移、资产与钱包持久化迁移，以及市场历史表迁移。
 - `app/api/`: 版本化 API 入口层，当前通过 `app/api/router.py` 统一聚合 v1 与预留的 v2 路由。
 - `app/api/v1/endpoints/`: 按功能拆分的接口目录，后续新增模块直接在这里落文件。
 - `app/api/v1/schemas/`: v1 接口请求/响应模型，Swagger、请求校验和返回结构约束以这里为准。
@@ -123,6 +133,7 @@ flowchart TD
 - `app/core/`: 全局配置与安全逻辑，目前包含环境变量读取和 JWT 签发。
 - `app/crud/`: 面向数据库的持久化逻辑，当前主要是 SSO 登录后的用户和角色写入。
 - `app/models/`: ORM 模型定义，Alembic 是否能正确生成迁移依赖这里的模型被 `__init__.py` 导入。
+- `app/models/sde.py`: 仅用于读取 `sde.marketGroups` / `sde.market_groups`、`sde.types` 这类静态数据表，不参与 Alembic 建表。
 - `app/services/`: 对外部系统的封装，当前主要是 EVE SSO 与 ESI，并且通过共享 `aiohttp.ClientSession` 复用外部 HTTP 连接。
 - `app/database.py`: 提供异步 SQLAlchemy 引擎与 `get_db()` 依赖。
 - `app/schemas/`: 目前保留为空目录，建议未来只放跨版本复用或不直接绑定某个 API 版本的共享 Schema。
@@ -165,6 +176,7 @@ ssh -p 22222 -N -L 5432:127.0.0.1:5432 ubuntu@43.163.228.205 -i ~/.ssh/NEW_Key.p
 EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 ```
 
+
 `.env.docker` 中的数据库连接串使用的是 `host.docker.internal:5432`，这正是为了访问宿主机上建立的 SSH 隧道。
 
 建议先单独开一个终端保持 SSH 隧道常驻，再在另一个终端执行 Docker 命令；如果 SSH 会话中断，容器内的后端会立即失去数据库连接。
@@ -179,6 +191,11 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 - `GET /api/v1/industry/jobs/me`：前端 `Industry` 页面已接入真实数据
 - `GET /api/v1/wallet/balance` / `journal` / `transactions`：前端 `Wallet` 页面已接入
 - `GET /api/v1/assets/me`：前端 `Assets` 页面已接入真实数据
+- `GET /api/v1/market/history/{type_id}`：前端 `Market` 页面已接入市场历史数据
+- `GET /api/v1/sde/market-groups/tree`：前端 `MarketBrowser` 页面左侧分类树数据
+- `GET /api/v1/sde/types`：前端 `MarketBrowser` 页面按分类读取物品列表
+- `GET /api/v1/sde/types/search`：前端 `MarketBrowser` 页面按名称检索物品
+- `GET /api/v1/market/orders/{type_id}`：前端 `MarketBrowser` 页面右侧实时盘口数据
 
 当前钱包接口还额外具备以下行为：
 
@@ -194,6 +211,23 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 - `character_wallet_journal_entries`
 - `character_wallet_transactions`
 - `character_assets`
+- `market_history`
+
+市场浏览器额外依赖以下 SDE 静态表存在于当前数据库：
+
+- `sde.marketGroups` 或 `sde.market_groups`
+- `sde.types`
+
+如果这些表不存在，新的 `/api/v1/sde/*` 接口会返回明确的 `503`，提示当前数据库未导入 SDE，而不是返回模糊的 `500`。
+
+当前市场浏览器右侧实时盘口不依赖 SDE，而是透传 ESI 市场订单接口：
+
+- `/api/v1/market/orders/{type_id}` 会请求 `markets/{region_id}/orders/`
+- 后端会复用 `resolve_ids(...)` 统一解析订单中的 `location_id`、`system_id`
+- 统一名称解析链路为 `L1 内存缓存 -> sde.vw_universal_names -> UniverseName -> ESI`
+- `UniverseName` 只在 ESI 回源成功后写入，用来缓存 SDE 里没有的动态名称
+- 对全局市场物品，后端会自动将请求星域重定向到全局市场星域
+- 当前全局市场白名单已包含 `44992`（PLEX）
 
 这意味着当前后端不再只是 Swagger 可调试状态，而是已经承担真实的浏览器登录回调和前端业务页面数据来源。
 
@@ -205,7 +239,7 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 
 1. Dashboard 汇总接口
 2. Industry 列表的分页、排序、筛选参数
-3. Market 订单或价格查询接口
+3. Market 更完整的情报接口，例如区域切换、价格摘要或订单数据
 4. Wallet / Assets 的时间范围过滤、位置树还原和价值估算
 
 建议优先做“汇总接口 + 列表分页”这一类前端收益最高的接口，而不是先扩太多零散 endpoint。
@@ -220,6 +254,7 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 - `/api/v1/industry/jobs/me` 返回前端可直接消费的名称扩展字段
 - `/api/v1/wallet/*` 返回适合前端表格直接消费的 entries / transactions 结构
 - `/api/v1/assets/me` 返回适合前端表格直接消费的 assets 结构和名称扩展字段
+- `/api/v1/market/history/{type_id}` 返回按日期升序的市场历史数组，供 ECharts 直接消费
 
 当前 `Wallet` 和 `Assets` 接口还额外承担两件事：
 
@@ -237,6 +272,136 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 
 后续新增接口时，尽量延续这个风格，避免前端为单个接口写特殊适配逻辑。
 
+## Market 历史接口策略
+
+当前市场历史接口采用“本地缓存优先，过期按需回源”的模式：
+
+- 路由文件位于 `app/api/v1/endpoints/market.py`
+- 模型位于 `app/models/market.py`
+- 返回 schema 位于 `app/api/v1/schemas/market.py`
+- ESI 拉取逻辑封装在 `app/services/eve_esi.py` 的 `get_market_history(...)`
+
+处理流程如下：
+
+- 前端传入 `type_id`，默认区域为吉他 `10000002`
+- 后端先查询 `market_history` 中该物品该区域的最新日期
+- 如果本地无数据，或最新日期早于配置允许的缓存窗口，则回源 ESI
+- ESI 返回后使用 PostgreSQL `ON CONFLICT DO NOTHING` 批量入库
+- 最终按日期升序返回本地数据库中的完整历史数组
+
+这让首次查询会稍慢一些，但后续同一物品的请求可以直接命中本地缓存。
+
+## Market Browser 接口策略
+
+市场浏览器当前由 [eve-server/app/api/v1/endpoints/sde.py](eve-server/app/api/v1/endpoints/sde.py) 和 [eve-server/app/api/v1/endpoints/market.py](eve-server/app/api/v1/endpoints/market.py) 共同支撑，用于支持前端左侧分类树、右侧星域切换和实时盘口的经典市场浏览体验。
+
+当前相关接口包括：
+
+- `GET /api/v1/sde/market-groups/tree`
+- `GET /api/v1/sde/types?group_id=...`
+- `GET /api/v1/sde/types/search?name=...`
+- `GET /api/v1/market/orders/{type_id}?region_id=...`
+
+实现约定如下：
+
+- 市场分类树直接读取 `sde.vw_unified_market_tree` 统一视图，再由后端装配为前端树节点结构
+- 物品名称优先取中文名，再回退到通用名/英文名
+- 搜索接口默认只返回前 50 条结果，避免前端一次吞下过大数据集
+- 实时盘口接口直接透传 ESI 市场订单，并复用统一名称解析服务补齐 `location_name`、`system_name`
+- 对全局市场物品，后端会自动将请求星域切换到全局市场星域
+- 当前库若未导入 SDE，会返回明确的 `503` 错误，方便联调期快速定位数据缺口
+
+## SDE 导入说明
+
+市场浏览器功能依赖数据库中的 SDE 静态表，而这些表不属于当前 Alembic 迁移管理范围。
+
+当前代码默认会读取：
+
+- `sde.vw_unified_market_tree`
+- `sde.types`
+
+这意味着即使你已经完成了 `alembic upgrade head`，如果数据库里还没有导入 SDE，下面这些接口仍然不会有真实数据：
+
+- `GET /api/v1/sde/market-groups/tree`
+- `GET /api/v1/sde/types`
+- `GET /api/v1/sde/types/search`
+
+### 最低要求
+
+要让市场浏览器正常工作，至少需要满足下面几点：
+
+1. 当前数据库存在 `sde` schema。
+2. `sde.vw_unified_market_tree` 已创建，并至少包含 `key`、`parent_key`、`name`、`iconname`、`is_group`、`type_id` 这些字段中的核心树结构字段。
+3. `sde.types` 已导入。
+4. `sde.types` 至少包含这些字段中的一部分：
+    `type_id`、`market_group_id`、`published`、`volume`、`zh_name`、`name`、`en_name`。
+
+### 推荐导入顺序
+
+如果你准备把 SDE 导入当前线上数据库或宿主机 SSH 隧道指向的目标库，推荐顺序如下：
+
+1. 先确认 SSH 隧道已经建立，或者当前 `DATABASE_URL` 已经指向正确的线上数据库：
+
+```bash
+ssh -p 22222 -N -L 5432:127.0.0.1:5432 ubuntu@43.163.228.205 -i ~/.ssh/NEW_Key.pem
+```
+
+1. 确认目标库可连接：
+
+```bash
+docker compose exec -T eve-server sh -lc 'echo "$DATABASE_URL"'
+```
+
+1. 创建 `sde` schema（如果还没有）：
+
+```bash
+docker compose exec -T eve-server sh -lc 'python - <<"PY"
+import asyncio
+from sqlalchemy import text
+from app.database import AsyncSessionLocal
+
+async def main():
+    async with AsyncSessionLocal() as session:
+        await session.execute(text("CREATE SCHEMA IF NOT EXISTS sde;"))
+        await session.commit()
+
+asyncio.run(main())
+PY'
+```
+
+1. 将你现有的 SDE SQL、CSV 或导出脚本导入到统一市场树视图所依赖的基础对象中，并确保最终可查询到 `sde.vw_unified_market_tree` 与 `sde.types`。
+
+### 导入后验证
+
+导入完成后，建议至少执行下面几个检查：
+
+```bash
+docker compose exec -T eve-server sh -lc 'python - <<"PY"
+import asyncio
+from sqlalchemy import text
+from app.database import AsyncSessionLocal
+
+async def main():
+    async with AsyncSessionLocal() as session:
+        print(await session.scalar(text("SELECT COUNT(*) FROM sde.vw_unified_market_tree")))
+        print(await session.scalar(text("SELECT COUNT(*) FROM sde.types WHERE COALESCE(published, 0) <> 0")))
+
+asyncio.run(main())
+PY'
+curl http://127.0.0.1:8000/api/v1/sde/market-groups/tree
+curl "http://127.0.0.1:8000/api/v1/sde/types/search?name=三钛"
+```
+
+### 当前接口的失败表现
+
+如果库里没有导入 SDE，后端现在会主动返回明确错误：
+
+- `503 sde_table_missing`：缺少 `sde.vw_unified_market_tree` 或 `sde.types`
+- `503 sde_query_failed`：表存在，但查询执行失败
+- `503 sde_table_shape_invalid`：表结构和当前接口读取约定不匹配
+
+这类报错优先说明“静态数据没准备好”或“字段名不一致”，而不是业务接口本身有问题。
+
 ## 调试建议
 
 如果前端页面异常但 Swagger 正常，优先按下面顺序排查：
@@ -248,7 +413,7 @@ EVE_SERVER_ENV_FILE=./eve-server/.env.docker docker compose up --build
 
 当前后端有两条外部 HTTP 服务链路：
 
-- `app/services/eve_esi.py`: 负责角色公开档案查询、Universe 名称解析、SDE + 本地缓存 + ESI 回退逻辑。
+- `app/services/eve_esi.py`: 负责角色公开档案查询、Universe 名称解析，以及 `L1 内存缓存 + sde.vw_universal_names + UniverseName + ESI` 的分层回退逻辑。
 - `app/services/eve_sso.py`: 负责 SSO Token 换取和 Token 验证。
 
 两者采用统一模式：共享 `aiohttp.ClientSession`、在 `app/main.py` 的 `lifespan` 中执行 `start()` / `close()`，并在生命周期未命中时通过 `get_session()` 兜底创建 session 并记录 warning。这样可以复用外部 HTTP 连接，并避免服务退出时留下未关闭连接池告警。
@@ -299,11 +464,25 @@ EVE 的 `access_token` 有较短有效期，因此不要假设数据库里保存
 目前已经落地的点包括：
 
 - `app/api/v1/schemas/universe.py` 中的 `UniverseNamesRequest`：限制 `ids` 必须是 1 到 1000 个正整数。
+- `POST /api/v1/universe/names`：优先命中 L1 内存缓存，再查 `sde.vw_universal_names` 与 `UniverseName`，最后才回退到 ESI。
 - `app/api/v1/schemas/industry.py` 中的 `IndustryJobStatus`：把工业任务状态定义为枚举，并补充 `status_label`。
 - `app/api/v1/schemas/industry.py` 中的时间字段：例如 `start_date`、`end_date`、`pause_date`、`completed_date` 会在 schema 校验阶段转换为标准时间对象。
 - `app/api/v1/endpoints/industry.py` 中的名称扩展字段：`blueprint_name`、`product_name`、`facility_name` 等会在返回前补齐。
 - `app/api/v1/schemas/wallet.py`：定义钱包余额、日记、交易记录以及分页/统计字段。
 - `app/api/v1/schemas/assets.py`：定义资产列表、资产汇总、位置坐标与资产自定义名字段。
+
+## Universe 名称解析策略
+
+当前通用名称解析入口为 `POST /api/v1/universe/names`，以及各业务接口内部复用的 `esi_service.resolve_ids(...)`。
+
+处理顺序如下：
+
+- 先查进程内 L1 TTL 缓存，减少同一批热点 ID 的重复数据库访问
+- 再查 `sde.vw_universal_names`，优先命中静态 SDE 名称
+- 若 SDE 未命中，再查本地 `universe_names` 表中的动态缓存名称
+- 最后才调用 ESI `/universe/names/` 批量回源
+
+其中 `universe_names` 表不会在命中 SDE 时反向写入，只会在 ESI 回源成功后新增或更新记录。这样可以让这张表始终只承载 SDE 未覆盖的动态名称，例如角色、军团、联盟、结构等实体。
 
 ## 资产与钱包入库策略
 
@@ -635,7 +814,7 @@ endpoint 层建议只做这几件事：
 4. 在 `app/services/eve_esi.py` 新增 `get_character_market_orders(...)`
 5. 在 `app/api/v1/endpoints/market.py` 写 `GET /api/v1/market/orders/me`
 6. 用 `get_current_character` 拿当前角色和 token
-7. 如果订单里有 type_id、location_id，就继续复用 `resolve_ids(...)` 做名称翻译
+7. 如果订单里有 `type_id`、`location_id`、`system_id` 等可解析 ID，就继续复用 `resolve_ids(...)` 做名称翻译
 8. 在 `app/api/v1/endpoints/__init__.py` 和 `app/api/v1/router.py` 注册 `market_router`
 9. 打开 `/docs` 检查字段说明
 

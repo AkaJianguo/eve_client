@@ -6,6 +6,8 @@ from app.api.v1.schemas.industry import (
     IndustryJobsResponse,
     IndustryJobStatus,
 )
+from app.api.v1.schemas.market import MarketHistoryItem, MarketOrder
+from app.api.v1.schemas.sde import SdeTypeItem, UnifiedTreeNode
 from app.api.v1.schemas.universe import UniverseNamesRequest, UniverseNamesResponse
 from app.api.v1.schemas.users import CurrentUserResponse
 from app.api.v1.schemas.wallet import (
@@ -27,6 +29,10 @@ __all__ = [
     "IndustryJobsQueryParams",
     "IndustryJobStatus",
     "IndustryJobsResponse",
+    "MarketHistoryItem",
+    "MarketOrder",
+    "SdeTypeItem",
+    "UnifiedTreeNode",
     "UniverseNamesRequest",
     "UniverseNamesResponse",
     "WalletBalanceResponse",

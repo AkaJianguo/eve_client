@@ -160,7 +160,7 @@ def _schedule_wallet_refresh(kind: str, character_id: int) -> None:
             async with AsyncSessionLocal() as session:
                 await _refresh_wallet_cache_for_character(session, character_id, kind)
         except Exception:
-            logger.exception("wallet %s background refresh failed: character_id=%s", kind, character_id)
+            logger.exception("💥 [Wallet] 钱包后台刷新失败：类型=%s，角色 ID=%s", kind, character_id)
         finally:
             _wallet_refresh_inflight.discard(refresh_key)
 
@@ -190,7 +190,7 @@ async def warm_wallet_cache_for_active_characters(batch_size: int | None = None)
                 try:
                     refreshed_any = await _refresh_wallet_cache_for_character(session, character_id, kind) or refreshed_any
                 except Exception:
-                    logger.exception("wallet warmup failed: character_id=%s kind=%s", character_id, kind)
+                    logger.exception("💥 [Wallet] 钱包缓存预热失败：角色 ID=%s，类型=%s", character_id, kind)
 
             if refreshed_any:
                 refreshed_count += 1

@@ -32,19 +32,19 @@ class EveSSOService:
 
     def get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            logger.warning("SSO session was not initialized by app lifespan; creating fallback session")
+            logger.warning("⚠️ [SSO] 服务会话未在应用生命周期中初始化，正在创建兜底会话")
             self._session = self._build_session()
         return self._session
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
             self._session = self._build_session()
-            logger.info("SSO service session started")
+            logger.info("🔐 [SSO] 服务会话已启动")
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
-            logger.info("SSO service session closed")
+            logger.info("🛑 [SSO] 服务会话已关闭")
 
     async def _request_token(self, data: Dict[str, str]) -> Dict[str, Any]:
         headers = {
@@ -58,13 +58,13 @@ class EveSSOService:
             async with session.post(self.token_url, headers=headers, data=data) as response:
                 if response.status != 200:
                     err = await response.text()
-                    logger.warning("SSO token exchange failed: status=%s body=%s", response.status, err)
+                    logger.warning("⚠️ [SSO] 令牌交换失败：状态码=%s，响应体=%s", response.status, err)
                     if response.status in {400, 401, 403}:
                         raise api_error(401, "sso_token_invalid", "SSO 授权码或刷新令牌无效，请重新授权")
                     raise api_error(502, "sso_upstream_failed", "EVE SSO 上游服务返回异常，请稍后重试")
                 return await response.json()
         except aiohttp.ClientError as exc:
-            logger.warning("SSO token request failed: %s", exc)
+            logger.warning("⚠️ [SSO] 令牌请求失败：错误=%s", exc)
             raise api_error(503, "sso_upstream_unavailable", "EVE SSO 服务暂时不可用，请稍后重试") from exc
 
     async def get_access_token(self, code: str) -> Dict[str, Any]:
@@ -88,13 +88,13 @@ class EveSSOService:
             async with session.get(self.verify_url, headers=headers) as response:
                 if response.status != 200:
                     err = await response.text()
-                    logger.warning("SSO verify failed: status=%s body=%s", response.status, err)
+                    logger.warning("⚠️ [SSO] 令牌校验失败：状态码=%s，响应体=%s", response.status, err)
                     if response.status in {400, 401, 403}:
                         raise api_error(401, "sso_verify_failed", "EVE SSO 令牌验证失败，请重新登录")
                     raise api_error(502, "sso_upstream_failed", "EVE SSO 验证服务返回异常，请稍后重试")
                 return await response.json()
         except aiohttp.ClientError as exc:
-            logger.warning("SSO verify request failed: %s", exc)
+            logger.warning("⚠️ [SSO] 校验请求失败：错误=%s", exc)
             raise api_error(503, "sso_upstream_unavailable", "EVE SSO 验证服务暂时不可用，请稍后重试") from exc
 
 # 暴露单例

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import MutableMapping
 from typing import Any
 
 import aiohttp
+import httpx
+from cachetools import TTLCache
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +17,11 @@ logger = logging.getLogger(__name__)
 
 ESI_USER_AGENT = "WangJianGuo-EVE-ESI/1.0"
 MAX_UNIVERSE_NAME_ID = 2_147_483_647
+UNIVERSAL_NAMES_VIEW = "sde.vw_universal_names"
+L1_NAME_CACHE_MAXSIZE = 50_000
+L1_NAME_CACHE_TTL_SECONDS = 86_400
+
+l1_name_cache: MutableMapping[int, str] = TTLCache(maxsize=L1_NAME_CACHE_MAXSIZE, ttl=L1_NAME_CACHE_TTL_SECONDS)
 
 
 class EveESIService:
@@ -30,19 +38,19 @@ class EveESIService:
     def get_session(self) -> aiohttp.ClientSession:
         """Get a reusable HTTP session, creating a fallback session if needed."""
         if self._session is None or self._session.closed:
-            logger.warning("ESI session was not initialized by app lifespan; creating fallback session")
+            logger.warning("⚠️ [ESI] 服务会话未在应用生命周期中初始化，正在创建兜底会话")
             self._session = self._build_session()
         return self._session
 
     async def start(self) -> None:
         if self._session is None or self._session.closed:
             self._session = self._build_session()
-            logger.info("ESI service session started")
+            logger.info("🛰️ [ESI] 服务会话已启动")
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
-            logger.info("ESI service session closed")
+            logger.info("🛑 [ESI] 服务会话已关闭")
 
     async def get_character_public_info(self, character_id: int) -> dict[str, Any] | None:
         """Fetch public character profile data from ESI."""
@@ -55,7 +63,7 @@ class EveESIService:
                 if response.status != 200:
                     body = await response.text()
                     logger.warning(
-                        "ESI character lookup failed: character_id=%s status=%s body=%s",
+                        "⚠️ [ESI] 角色公开信息查询失败：角色 ID=%s，状态码=%s，响应体=%s",
                         character_id,
                         response.status,
                         body,
@@ -63,7 +71,7 @@ class EveESIService:
                     return None
                 return await response.json()
         except aiohttp.ClientError as exc:
-            logger.warning("ESI character request failed: character_id=%s error=%s", character_id, exc)
+            logger.warning("⚠️ [ESI] 角色公开信息请求失败：角色 ID=%s，错误=%s", character_id, exc)
             return None
 
     async def get_character_industry_jobs(
@@ -86,7 +94,7 @@ class EveESIService:
                 if response.status != 200:
                     body = await response.text()
                     logger.warning(
-                        "ESI industry jobs lookup failed: character_id=%s status=%s body=%s",
+                        "⚠️ [ESI] 工业任务查询失败：角色 ID=%s，状态码=%s，响应体=%s",
                         character_id,
                         response.status,
                         body,
@@ -95,7 +103,7 @@ class EveESIService:
                 return await response.json()
         except aiohttp.ClientError as exc:
             logger.warning(
-                "ESI industry jobs request failed: character_id=%s error=%s",
+                "⚠️ [ESI] 工业任务请求失败：角色 ID=%s，错误=%s",
                 character_id,
                 exc,
             )
@@ -116,7 +124,7 @@ class EveESIService:
                 if response.status != 200:
                     body = await response.text()
                     logger.warning(
-                        "ESI wallet balance lookup failed: character_id=%s status=%s body=%s",
+                        "⚠️ [ESI] 钱包余额查询失败：角色 ID=%s，状态码=%s，响应体=%s",
                         character_id,
                         response.status,
                         body,
@@ -125,7 +133,7 @@ class EveESIService:
                 payload = await response.json()
                 return float(payload)
         except (aiohttp.ClientError, TypeError, ValueError) as exc:
-            logger.warning("ESI wallet balance request failed: character_id=%s error=%s", character_id, exc)
+            logger.warning("⚠️ [ESI] 钱包余额请求失败：角色 ID=%s，错误=%s", character_id, exc)
             return None
 
     async def get_character_wallet_journal(
@@ -155,7 +163,7 @@ class EveESIService:
                 if response.status != 200:
                     body = await response.text()
                     logger.warning(
-                        "ESI wallet transactions lookup failed: character_id=%s status=%s body=%s",
+                        "⚠️ [ESI] 钱包交易查询失败：角色 ID=%s，状态码=%s，响应体=%s",
                         character_id,
                         response.status,
                         body,
@@ -164,7 +172,7 @@ class EveESIService:
                 payload = await response.json()
                 return payload if isinstance(payload, list) else None
         except aiohttp.ClientError as exc:
-            logger.warning("ESI wallet transactions request failed: character_id=%s error=%s", character_id, exc)
+            logger.warning("⚠️ [ESI] 钱包交易请求失败：角色 ID=%s，错误=%s", character_id, exc)
             return None
 
     async def get_character_assets(
@@ -178,6 +186,45 @@ class EveESIService:
             path="assets/",
             log_key="assets",
         )
+
+    async def get_market_history(
+        self,
+        type_id: int,
+        region_id: int = 10000002,
+    ) -> list[dict[str, Any]]:
+        url = f"{self.base_url}/markets/{region_id}/history/"
+        params = {
+            "datasource": "tranquility",
+            "type_id": type_id,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=20, headers={"User-Agent": ESI_USER_AGENT}) as client:
+                response = await client.get(url, params=params)
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "⚠️ [ESI] 市场历史请求失败：物品 ID=%s，星域 ID=%s，错误=%s",
+                type_id,
+                region_id,
+                exc,
+            )
+            raise
+
+        if response.status_code == 200:
+            payload = response.json()
+            return payload if isinstance(payload, list) else []
+
+        if response.status_code == 404:
+            return []
+
+        logger.warning(
+            "⚠️ [ESI] 市场历史查询失败：物品 ID=%s，星域 ID=%s，状态码=%s，响应体=%s",
+            type_id,
+            region_id,
+            response.status_code,
+            response.text,
+        )
+        response.raise_for_status()
 
     async def get_character_asset_locations(
         self,
@@ -229,7 +276,7 @@ class EveESIService:
                     if response.status != 200:
                         body = await response.text()
                         logger.warning(
-                            "ESI %s lookup failed: character_id=%s page=%s status=%s body=%s",
+                            "⚠️ [ESI] %s 查询失败：角色 ID=%s，页码=%s，状态码=%s，响应体=%s",
                             log_key,
                             character_id,
                             page,
@@ -241,7 +288,7 @@ class EveESIService:
                     payload = await response.json()
                     if not isinstance(payload, list):
                         logger.warning(
-                            "ESI %s returned unexpected payload: character_id=%s page=%s payload_type=%s",
+                            "⚠️ [ESI] %s 返回了异常数据结构：角色 ID=%s，页码=%s，数据类型=%s",
                             log_key,
                             character_id,
                             page,
@@ -253,7 +300,7 @@ class EveESIService:
                     total_pages = int(response.headers.get("X-Pages", total_pages))
                     page += 1
         except (aiohttp.ClientError, ValueError) as exc:
-            logger.warning("ESI %s request failed: character_id=%s error=%s", log_key, character_id, exc)
+            logger.warning("⚠️ [ESI] %s 请求失败：角色 ID=%s，错误=%s", log_key, character_id, exc)
             return None
 
         return aggregated
@@ -283,7 +330,7 @@ class EveESIService:
                     if response.status != 200:
                         body = await response.text()
                         logger.warning(
-                            "ESI %s lookup failed: character_id=%s chunk_start=%s status=%s body=%s",
+                            "⚠️ [ESI] %s 查询失败：角色 ID=%s，分片起点=%s，状态码=%s，响应体=%s",
                             log_key,
                             character_id,
                             start,
@@ -295,7 +342,7 @@ class EveESIService:
                     payload = await response.json()
                     if not isinstance(payload, list):
                         logger.warning(
-                            "ESI %s returned unexpected payload: character_id=%s payload_type=%s",
+                            "⚠️ [ESI] %s 返回了异常数据结构：角色 ID=%s，数据类型=%s",
                             log_key,
                             character_id,
                             type(payload).__name__,
@@ -304,27 +351,70 @@ class EveESIService:
 
                     aggregated.extend(payload)
         except aiohttp.ClientError as exc:
-            logger.warning("ESI %s request failed: character_id=%s error=%s", log_key, character_id, exc)
+            logger.warning("⚠️ [ESI] %s 请求失败：角色 ID=%s，错误=%s", log_key, character_id, exc)
             return None
 
         return aggregated
 
     async def resolve_ids(self, db: AsyncSession, ids: list[int]) -> dict[int, str]:
-        """Resolve EVE IDs via SDE tables, local cache, then ESI fallback."""
+        """Resolve EVE IDs via universal SDE view, local cache, then ESI fallback."""
         if not ids:
             return {}
 
         pending_ids = {item_id for item_id in dict.fromkeys(ids) if 0 < item_id <= MAX_UNIVERSE_NAME_ID}
         resolved: dict[int, str] = {}
+        total_ids = len(pending_ids)
 
         if not pending_ids:
             return resolved
 
+        l1_hits = self._resolve_from_l1(pending_ids, resolved)
+        if not pending_ids:
+            logger.info("🧠 [ESI] 名称解析完成：总数=%s，L1 命中=%s，L2 视图命中=0，L2 缓存命中=0，L3 ESI 命中=0", total_ids, l1_hits)
+            return resolved
+
+        before_sde = len(pending_ids)
         await self._resolve_from_sde(db, pending_ids, resolved)
+        sde_hits = before_sde - len(pending_ids)
+
+        before_cache = len(pending_ids)
         await self._resolve_from_cache(db, pending_ids, resolved)
+        cache_hits = before_cache - len(pending_ids)
+
+        before_esi = len(pending_ids)
         await self._resolve_from_esi(db, pending_ids, resolved)
+        esi_hits = before_esi - len(pending_ids)
+
+        logger.info(
+            "🧠 [ESI] 名称解析完成：总数=%s，L1 命中=%s，L2 视图命中=%s，L2 缓存命中=%s，L3 ESI 命中=%s，未解析=%s",
+            total_ids,
+            l1_hits,
+            sde_hits,
+            cache_hits,
+            esi_hits,
+            len(pending_ids),
+        )
 
         return resolved
+
+    def _resolve_from_l1(self, pending_ids: set[int], resolved: dict[int, str]) -> int:
+        if not pending_ids:
+            return 0
+
+        resolved_ids: list[int] = []
+        for item_id in pending_ids:
+            cached_name = l1_name_cache.get(item_id)
+            if cached_name:
+                resolved[item_id] = cached_name
+                resolved_ids.append(item_id)
+
+        for item_id in resolved_ids:
+            pending_ids.discard(item_id)
+
+        if resolved_ids:
+            logger.info("⚡ [ESI] L1 内存缓存命中：命中数量=%s", len(resolved_ids))
+
+        return len(resolved_ids)
 
     async def _resolve_from_sde(
         self,
@@ -338,34 +428,18 @@ class EveESIService:
         id_list_str = ",".join(map(str, sorted(pending_ids)))
 
         try:
-            items_query = text(
-                f"SELECT type_id AS typeid, COALESCE(zh_name, name, en_name, de_name) AS typename FROM sde.types WHERE type_id IN ({id_list_str})"
+            names_query = text(
+                f"SELECT id, name, category FROM {UNIVERSAL_NAMES_VIEW} WHERE id IN ({id_list_str})"
             )
-            items_result = await db.execute(items_query)
-            for row in items_result.mappings():
-                item_id = int(row["typeid"])
-                resolved[item_id] = str(row["typename"])
-                pending_ids.discard(item_id)
+            names_result = await db.execute(names_query)
+            for row in names_result.mappings():
+                entity_id = int(row["id"])
+                entity_name = str(row["name"])
+                resolved[entity_id] = entity_name
+                l1_name_cache[entity_id] = entity_name
+                pending_ids.discard(entity_id)
         except Exception as exc:
-            logger.warning("SDE types lookup failed: %s", exc)
-            await db.rollback()  # 👈 回滚中止的事务
-
-        if not pending_ids:
-            return
-
-        id_list_str = ",".join(map(str, sorted(pending_ids)))
-
-        try:
-            systems_query = text(
-                f'SELECT "solarSystemID" AS solarsystemid, COALESCE("solarSystemName_zh", "solarSystemName", "solarSystemName_en") AS solarsystemname FROM sde.solarsystems WHERE "solarSystemID" IN ({id_list_str})'
-            )
-            systems_result = await db.execute(systems_query)
-            for row in systems_result.mappings():
-                system_id = int(row["solarsystemid"])
-                resolved[system_id] = str(row["solarsystemname"])
-                pending_ids.discard(system_id)
-        except Exception as exc:
-            logger.warning("SDE solarsystems lookup failed: %s", exc)
+            logger.warning("⚠️ [ESI] 通用名称视图查询失败：视图=%s，错误=%s", UNIVERSAL_NAMES_VIEW, exc)
             await db.rollback()  # 👈 回滚中止的事务
 
     async def _resolve_from_cache(
@@ -381,9 +455,10 @@ class EveESIService:
             result = await db.execute(select(UniverseName).where(UniverseName.id.in_(pending_ids)))
             for record in result.scalars().all():
                 resolved[record.id] = record.name
+                l1_name_cache[record.id] = record.name
                 pending_ids.discard(record.id)
         except Exception as exc:
-            logger.warning("Universe names cache lookup failed: %s", exc)
+            logger.warning("⚠️ [ESI] 本地宇宙名称缓存查询失败：错误=%s", exc)
             await db.rollback()  # 👈 回滚中止的事务
 
     async def _resolve_from_esi(
@@ -405,7 +480,7 @@ class EveESIService:
                 if response.status != 200:
                     body = await response.text()
                     logger.warning(
-                        "ESI universe names lookup failed: status=%s body=%s",
+                        "⚠️ [ESI] 宇宙名称查询失败：状态码=%s，响应体=%s",
                         response.status,
                         body,
                     )
@@ -428,6 +503,7 @@ class EveESIService:
                         item_category = str(item.get("category", "unknown"))
 
                         resolved[item_id] = item_name
+                        l1_name_cache[item_id] = item_name
 
                         existing = existing_map.get(item_id)
                         if existing is None:
@@ -445,10 +521,10 @@ class EveESIService:
                     pending_ids.difference_update(returned_ids)
                     await db.commit()
                 except Exception as db_exc:
-                    logger.warning("Database operation failed while caching ESI names: %s", db_exc)
+                    logger.warning("⚠️ [ESI] 缓存名称到数据库失败：错误=%s", db_exc)
                     await db.rollback()  # 👈 回滚中止的事务
         except aiohttp.ClientError as exc:
-            logger.warning("ESI universe names request failed: %s", exc)
+            logger.warning("⚠️ [ESI] 宇宙名称请求失败：错误=%s", exc)
 
 
 esi_service = EveESIService()

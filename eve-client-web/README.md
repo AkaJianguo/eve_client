@@ -14,6 +14,9 @@
 - `Wallet` 页面已接入 `/api/v1/wallet/*`，展示余额、财务日记和市场成交
 - `Assets` 页面已接入 `/api/v1/assets/me`，展示资产清单、位置翻译和基础筛选
 - `Wallet` 页面已接入后端 `cache_status`，可以提示当前是新鲜缓存、后台刷新还是冷启动刷新
+- `Market` 页面已接入 `/api/v1/market/history/{type_id}`，展示吉他市场的历史价格与成交量图表
+- `MarketBrowser` 页面已接入市场分类树、物品检索、实时盘口、地点名称翻译和全局市场物品自动切换提示
+- 市场分类树已抽成公共组件，后续制造业等页面可以直接复用同一套树面板与图标图源逻辑
 
 ## 技术栈
 
@@ -36,7 +39,10 @@ eve-client-web/
 │   │       ├── main.scss
 │   │       └── variables.scss
 │   ├── components/
-│   │   └── EveImage.vue
+│   │   ├── EveImage.vue
+│   │   └── common/
+│   │       ├── EveTreeIconSource.vue
+│   │       └── EveTreePanel.vue
 │   ├── layouts/
 │   │   └── MainLayout.vue
 │   ├── router/
@@ -49,6 +55,8 @@ eve-client-web/
 │   ├── views/
 │   │   ├── Dashboard.vue
 │   │   ├── Industry.vue
+│   │   ├── Market.vue
+│   │   ├── MarketBrowser.vue
 │   │   ├── Assets.vue
 │   │   ├── Profile.vue
 │   │   ├── Wallet.vue
@@ -71,6 +79,8 @@ eve-client-web/
 - `/dashboard`：控制台首页
 - `/wallet`：财务中心
 - `/assets`：资产清单
+- `/market`：市场情报
+- `/market-browser`：市场浏览器
 - `/industry`：工业监控页
 
 路由守卫定义在 `src/router/index.ts`：
@@ -165,7 +175,49 @@ eve-client-web/
 - 已切换为服务端分页，并展示蓝图、唯一实例和数量汇总卡片
 - 支持关键字筛选、蓝图/普通物资筛选和空状态展示
 - 复用 `EveImage.vue` 和 `/api/v1/universe/names` 做图标与名称展示
+- `/api/v1/universe/names` 在后端会优先命中 L1 内存缓存，再查 `sde.vw_universal_names`、`UniverseName` 和 ESI
 - 当后端返回资产自定义名和深层位置时，页面会优先展示这些解析结果
+
+### 公共组件
+
+- `src/components/EveImage.vue`
+  - 用于渲染 EVE 官方 `images.evetech.net` 的物品类型图
+  - 当前已被 Assets、Industry、MarketBrowser 等页面复用
+- `src/components/common/EveTreePanel.vue`
+  - 用于渲染带标题、加载态和统一风格的树状面板
+  - 当前已接入 MarketBrowser，后续制造业页面可以直接复用
+- `src/components/common/EveTreeIconSource.vue`
+  - 专门负责树节点的图源拼接
+  - 通过 `iconName` 输出 `/eve-icons/...` 本地静态图标地址
+
+### Market
+
+文件：`src/views/Market.vue`
+
+- 已接入 `/api/v1/market/history/{type_id}`
+- 当前默认查询吉他区域的三钛合金历史数据
+- 顶部提供常见硬通货快捷选择器，例如 Tritanium、PLEX、Ishtar
+- 使用 `ECharts` 绘制平均价格折线、MA5 均线和成交量柱状图
+- 支持窗口缩放自适应和空状态提示
+
+### MarketBrowser
+
+文件：`src/views/MarketBrowser.vue`
+
+- 采用左侧分类树、右侧星域切换与实时盘口的经典市场浏览器布局
+- 左侧通过 `/api/v1/sde/market-groups/tree` 读取市场分类树
+- 左侧树展示由 `src/components/common/EveTreePanel.vue` 承担
+- 树节点图标由 `src/components/common/EveTreeIconSource.vue` 承担
+- 右侧订单表通过 `/api/v1/market/orders/{type_id}?region_id=...` 读取实时盘口
+- 后端会把订单中的 `location_id` 和 `system_id` 翻译成可读名称，前端直接展示星系和空间站/星堡位置
+- 对全局市场物品，页面会显示“该物品已自动切换到全局市场”提示
+- 当前前端本地白名单已包含 `44992`（PLEX），与后端重定向规则保持一致
+
+当前如果要启用树节点图标，只需要把对应图片放到前端 `public/eve-icons/` 目录。
+
+这个页面的左侧树依赖后端数据库已经导入 `sde.marketGroups`（或兼容的 `sde.market_groups`）和 `sde.types`，右侧实时盘口则依赖后端透传 ESI 市场订单接口。
+
+如果后端当前库没有导入 SDE，页面会收到后端返回的明确错误信息，而不是静默空白。
 
 ## 状态管理
 
@@ -186,11 +238,13 @@ eve-client-web/
 
 ```bash
 cd eve-client-web
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 默认访问地址：<http://127.0.0.1:5173>
+
+当前前端依赖管理已统一为 `pnpm`。如果本机更新了依赖，Docker 前端容器也需要重新执行一次安装流程，最直接的做法是重启 `eve-client` 容器或重新 `docker compose up`。
 
 ## 授权说明
 
@@ -210,13 +264,17 @@ npm run dev
 
 这样前端容器中的 `/api` 请求会自动代理到后端容器。
 
+前端容器现在也统一使用 `pnpm install --frozen-lockfile` 和 `pnpm dev`，因此宿主机与容器会基于同一份 `pnpm-lock.yaml` 安装依赖。
+
 ## 构建命令
 
 ```bash
-npm run build
+pnpm build
 ```
 
 当前项目已经验证过可成功构建。
+
+当前前端市场页已引入 `echarts`。如果在宿主机新增了图表相关依赖，而 Docker 前端容器尚未更新，请重新拉起 `eve-client` 容器，让容器内重新执行一次 `pnpm install --frozen-lockfile`。
 
 ## 下一步建议
 
@@ -244,9 +302,9 @@ npm run build
 ### P1
 
 - Market
-  - 新建 `src/views/Market.vue`
-  - 对接角色市场订单或市场行情接口
-  - 复用 `EveImage.vue` 和现有高密度表格风格
+  - 增加更多预设物资与搜索能力
+  - 扩展价格摘要、涨跌幅和更完整的市场情报卡片
+  - 补充区域切换与更多均线指标
 - Characters
   - 展示当前登录角色、订阅状态、权限范围、Token 健康度
 
@@ -270,6 +328,7 @@ npm run build
 如果继续扩前端，建议按下面方式落文件：
 
 - 新页面：`src/views/<Page>.vue`
+- 通用展示组件：`src/components/common/`
 - 新业务组件：`src/components/` 下按业务拆分
 - 新状态管理：`src/stores/<module>.ts`
 - 新请求封装：`src/utils/request.ts` 基础上再按业务拆 helper

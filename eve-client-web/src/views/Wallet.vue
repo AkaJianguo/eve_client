@@ -21,6 +21,11 @@ import { translateRefType } from '@/utils/eve-dict'
 import { useUniverseStore } from '@/stores/universe'
 
 type WalletCacheStatus = 'hit_fresh' | 'stale_refreshing' | 'miss_refreshed'
+type WalletCacheStatusMeta = {
+  scope: string
+  type: 'success' | 'info' | 'warning'
+  text: string
+}
 
 type WalletBalanceResponse = {
   user_id?: number
@@ -168,7 +173,7 @@ function extractWalletErrorMessage(error: unknown) {
   return '钱包数据读取失败，请稍后重试。'
 }
 
-function getCacheStatusMeta(scope: string, status: WalletCacheStatus | null) {
+function getCacheStatusMeta(scope: string, status: WalletCacheStatus | null): WalletCacheStatusMeta | null {
   if (!status) {
     return null
   }
@@ -352,7 +357,7 @@ const cacheStatusItems = computed(() => {
     getCacheStatusMeta('钱包余额', balanceCacheStatus.value),
     getCacheStatusMeta('财务日记', journalCacheStatus.value),
     getCacheStatusMeta('市场交易', transactionCacheStatus.value),
-  ].filter(Boolean)
+  ].filter((item): item is WalletCacheStatusMeta => item !== null)
 })
 
 const cacheStatusAlertType = computed(() => {
